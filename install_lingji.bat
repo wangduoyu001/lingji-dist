@@ -20,12 +20,14 @@ rem ====================================================================
 rem ---------------- 参数解析 ----------------
 set "ARG_ROOT="
 set "ARG_URL="
+set "ARG_NOGUI="
 :parse_args
 if "%~1"=="" goto :args_done
 if /i "%~1"=="--root" ( set "ARG_ROOT=%~2" & shift /1 & shift /1 & goto :parse_args )
 if /i "%~1"=="--url" ( set "ARG_URL=%~2" & shift /1 & shift /1 & goto :parse_args )
 if /i "%~1"=="--uninstall" ( set "ARG_UNINSTALL=1" & shift /1 & goto :parse_args )
 if /i "%~1"=="--no-link" ( set "ARG_NOLINK=1" & shift /1 & goto :parse_args )
+if /i "%~1"=="--no-gui" ( set "ARG_NOGUI=1" & shift /1 & goto :parse_args )
 if /i "%~1"=="--i-understand-data-loss" ( set "ARG_FORCE=1" & shift /1 & goto :parse_args )
 if /i "%~1"=="--help" ( goto :usage_main )
 echo [错误] 未知参数：%~1
@@ -188,6 +190,33 @@ if defined NEED_COPY (
 if not exist "%CORE_EXE%" ( echo [错误] 安装包不完整：缺少 lingji-core.exe & exit /b 2 )
 if not exist "%MCP_EXE%" ( echo [错误] 安装包不完整：缺少 lingji-mcp.exe & exit /b 2 )
 call :log "  安装包就绪"
+rem ---------------- 第 2.5 步：准备图形界面（GUI）安装包 ----------------
+set "GUI_SETUP="
+set "GUI_SKIP="
+if defined ARG_NOGUI set "GUI_SKIP=1"
+if not defined GUI_SKIP (
+  rem 优先使用本目录自带的 GUI 安装包
+  for %%F in ("%PKG_ROOT%\lingji-desktop-setup.exe") do if exist "%%F" set "GUI_SETUP=%%F"
+  if not defined GUI_SETUP for %%F in ("%PKG_ROOT%\*setup.exe") do set "GUI_SETUP=%%F"
+  if defined GUI_SETUP (
+    call :log "  发现图形界面安装包：!GUI_SETUP!"
+  ) else (
+    call :log "  未找到图形界面安装包，尝试从发布页下载 ..."
+    set "GUI_ZIP=%INSTALL_ROOT%\downloads\lingji-desktop-setup.exe"
+    if not exist "!GUI_ZIP!" (
+      if not exist "%INSTALL_ROOT%\downloads" md "%INSTALL_ROOT%\downloads" 2>nul
+      curl -L --fail --connect-timeout 20 -o "!GUI_ZIP!" "https://github.com/wangduoyu001/lingji-dist/releases/latest/download/lingji-desktop-setup.exe" >>"%LOG_FILE%" 2>&1
+    )
+    if exist "!GUI_ZIP!" set "GUI_SETUP=!GUI_ZIP!"
+    if defined GUI_SETUP (
+      call :log "  图形界面安装包下载完成：!GUI_SETUP!"
+    ) else (
+      call :log "  图形界面安装包下载失败，界面功能需手动获取（不影响命令行功能）"
+    )
+  )
+) else (
+  call :log "  按 --no-gui 跳过图形界面安装包准备"
+)
 rem ---------------- 第 3 步：准备 Ollama 与模型目录 ----------------
 call :log "[3/6] 准备本地大模型（Ollama）..."
 set "OLLAMA_EXE="
@@ -418,6 +447,21 @@ call :clip_first
 >>"%SUMMARY_FILE%" echo 停止灵机：结束 lingji-core.exe 进程即可；重启：bin\lingji-core.exe --data-root %DATA_ROOT%
 echo ============================================================
 call :log "==== 安装结束：成功 ===="
+rem ---------------- 图形界面入口提示 ----------------
+if defined GUI_SETUP (
+  >>"%SUMMARY_FILE%" echo.
+  >>"%SUMMARY_FILE%" echo 图形界面：%GUI_SETUP%
+  echo ------------------------------------------------------------
+  echo   图形界面已就绪：
+  echo     !GUI_SETUP!
+  echo   双击该文件即可安装并打开灵机桌面界面（认知雷达 / 商机看板 / 社群监控）。
+  echo   界面与命令行共用同一套后端（http://127.0.0.1:8766）和同一份记忆。
+) else (
+  echo ------------------------------------------------------------
+  echo   图形界面：未安装。命令行功能不受影响。
+  echo   如需桌面界面，请向发放方索取 lingji-desktop-setup.exe 后双击安装。
+)
+echo ------------------------------------------------------------
 exit /b 0
 rem ====================================================================
 rem  子程序区（主流程以 exit /b 收尾，不会穿窗落入此处）
@@ -458,6 +502,7 @@ echo   （无参数）        正常安装，自动选剩余空间大于 50G 的非系统盘
 echo   --root ^<目录^>     指定安装目录（默认自动选 E 盘/D 盘非系统盘）
 echo   --url ^<zip地址^>  指定安装包 zip 下载地址
 echo   --no-link        安装但跳过自动 MCP 注册
+echo   --no-gui         安装后不准备/不启动图形界面
 echo   --uninstall      一键卸载（清除灵机记忆与数据，不删其他文件）
 echo   --i-understand-data-loss  卸载时强制越过生产数据守卫
 echo   --help           显示本帮助

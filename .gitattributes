@@ -1,0 +1,6 @@
+*.bat -text
+*.md text eol=lf
+*.yml text eol=lf
+*.gui text eol=lf
+*.exe binary
+*.zip binary
